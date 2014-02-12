@@ -4,7 +4,7 @@
 
 Usage:
   glow_client.py all
-  glow_client.py --server=SERVER_LABEL 
+  glow_client.py --server=SERVER_LABEL
   glow_client.py --cluster=CLUSTER_LABEL 
   glow_client.py --cluster=CLUSTER_LABEL --server=SERVER_LABEL
   
@@ -48,12 +48,78 @@ Description:
    
     
 """
+
 from docopt import docopt
+import requests
+import pprint
+
+class GlowClient:
+    
+    def __init__(self, argdict):
+        self.arg_dict = argdict
+        self.server_url = "http://127.0.0.1:5000"
+        
+    def run(self):
+        if self.arg_dict["all"]:
+            self.get_temperature_all_rest()
+        elif self.arg_dict["--cluster"]:
+            if self.arg_dict["--server"]:
+                self.get_temperature_rack_rest(self.arg_dict["--cluster"], self.arg_dict["--server"])
+            else:
+                self.get_temperature_rack_rest(self.arg_dict["--cluster"])
+        elif self.arg_dict["--server"]:
+            self.get_temperature_all_rest(self.arg_dict["--server"])
+            
+    
+    def get_temperature_all_rest(self, server=None):
+        surl = "/cm/v1.0/glow/t"
+        result_dict = self.request_rest_api(surl)
+        data_dict = result_dict["glow"]["data"]
+        implicit_rack_name = None
+        if server:
+            for rack_name in data_dict:
+                if server in data_dict[rack_name]:
+                    implicit_rack_name = rack_name
+                    break
+            if implicit_rack_name:
+                filtered_data_dict = {implicit_rack_name: {server: data_dict[implicit_rack_name][server]}}
+            else:
+                filtered_data_dict = {"Unknown-Rack": {server: None}}
+            result_dict["glow"]["data"] = filtered_data_dict
+        pprint.pprint(result_dict)
+    
+    def get_temperature_rack_rest(self, rack_name, server=None):
+        surl = "/cm/v1.0/glow/t"
+        if rack_name:
+            surl += "/{0}".format(rack_name)
+        if server:
+            surl += "/{0}".format(server)
+        result_dict = self.request_rest_api(surl)
+        data_dict = result_dict["glow"]["data"][rack_name]
+        if server:
+            if server in data_dict:
+                result_dict["glow"]["data"][rack_name] = {server: data_dict[server]}
+            else:
+                result_dict["glow"]["data"][rack_name] = {server: None}
+        pprint.pprint(result_dict)
+    
+    def request_rest_api(self, surl):
+        r = requests.get(self.server_url + surl)
+        return r.json()
 
 
 if __name__ == '__main__':
     arguments = docopt(__doc__, version='1.0')
+    gclient = GlowClient(arguments)
+    gclient.run()
+    
+    """
     print(arguments)
+    server = "not defined"
+    if arguments['--server'] is not None:
+        server = arguments['--server']
+    print server
+    """
 
 '''    
 1. declare via docopt some nice command for the commandline
